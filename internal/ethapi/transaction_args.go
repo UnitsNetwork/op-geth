@@ -70,6 +70,14 @@ type TransactionArgs struct {
 
 	// For SetCodeTxType
 	AuthorizationList []types.SetCodeAuthorization `json:"authorizationList"`
+
+	// This configures whether blobs are allowed to be passed.
+	blobSidecarAllowed bool
+
+	Mint        *hexutil.Big `json:"mint,omitempty"`
+	SourceHash  *common.Hash `json:"sourceHash,omitempty"`
+	IsDepositTx bool         `json:"isDepositTx,omitempty"`
+	IsSystemTx  bool         `json:"isSystemTx,omitempty"`
 }
 
 // from retrieves the transaction sender address.
@@ -492,6 +500,9 @@ func (args *TransactionArgs) ToMessage(baseFee *big.Int, skipNonceCheck, skipEoA
 		SetCodeAuthorizations: args.AuthorizationList,
 		SkipNonceChecks:       skipNonceCheck,
 		SkipFromEOACheck:      skipEoACheck,
+		Mint:                  (*big.Int)(args.Mint),
+		IsDepositTx:           args.IsDepositTx,
+		IsSystemTx:            args.IsSystemTx,
 	}
 }
 
@@ -500,6 +511,8 @@ func (args *TransactionArgs) ToMessage(baseFee *big.Int, skipNonceCheck, skipEoA
 func (args *TransactionArgs) ToTransaction(defaultType int) *types.Transaction {
 	usedType := types.LegacyTxType
 	switch {
+	case args.IsDepositTx || defaultType == types.DepositTxType:
+		usedType = types.DepositTxType
 	case args.AuthorizationList != nil || defaultType == types.SetCodeTxType:
 		usedType = types.SetCodeTxType
 	case args.BlobHashes != nil || defaultType == types.BlobTxType:
@@ -590,6 +603,18 @@ func (args *TransactionArgs) ToTransaction(defaultType int) *types.Transaction {
 			Value:      (*big.Int)(args.Value),
 			Data:       args.data(),
 			AccessList: *args.AccessList,
+		}
+
+	case types.DepositTxType:
+		data = &types.DepositTx{
+			To:                  args.To,
+			SourceHash:          *args.SourceHash,
+			From:                *args.From,
+			Mint:                (*big.Int)(args.Mint),
+			Value:               (*big.Int)(args.Value),
+			Gas:                 uint64(*args.Gas),
+			IsSystemTransaction: args.IsSystemTx,
+			Data:                args.data(),
 		}
 
 	default:

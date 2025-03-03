@@ -129,7 +129,7 @@ type BlockOverrides struct {
 	PrevRandao    *common.Hash
 	BaseFeePerGas *hexutil.Big
 	BlobBaseFee   *hexutil.Big
-	BeaconRoot    *common.Hash
+	BeaconRoot    *common.Hash `json:"parentBeaconBlockRoot"`
 	Withdrawals   *types.Withdrawals
 }
 
