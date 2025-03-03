@@ -18,9 +18,13 @@ package ethapi
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/tracing"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/holiman/uint256"
 	"math/big"
 	"time"
 
@@ -233,11 +237,18 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 		}
 		tx := call.ToTransaction(types.DynamicFeeTxType)
 		txes[i] = tx
+		txBytes, err := tx.MarshalBinary()
+		if err != nil {
+			log.Info("Error adding transaction", "error", err)
+		}
+		log.Info("Processing transaction", "type", tx.Type(), "tx", hex.EncodeToString(txBytes), "mint", tx.Mint())
+
 		tracer.reset(tx.Hash(), uint(i))
 		// EoA check is always skipped, even in validation mode.
 		msg := call.ToMessage(header.BaseFee, !sim.validate, true)
 		result, err := applyMessageWithEVM(ctx, evm, msg, timeout, sim.gp)
 		if err != nil {
+			log.Error("Error applying transaction", "error", err)
 			txErr := txValidationError(err)
 			return nil, nil, nil, txErr
 		}
@@ -249,9 +260,9 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 			root = sim.state.IntermediateRoot(sim.chainConfig.IsEIP158(blockContext.BlockNumber)).Bytes()
 		}
 		gasUsed += result.UsedGas
-		receipts[i] = core.MakeReceipt(evm, result, sim.state, blockContext.BlockNumber, common.Hash{}, tx, gasUsed, root, sim.chainConfig, tx.Nonce())
-		blobGasUsed += receipts[i].BlobGasUsed
 		logs := tracer.Logs()
+		receipts[i] = core.MakeReceiptWithLogs(evm, result, sim.state, blockContext.BlockNumber, common.Hash{}, tx, gasUsed, root, sim.chainConfig, tx.Nonce(), logs)
+		blobGasUsed += receipts[i].BlobGasUsed
 		callRes := simCallResult{ReturnValue: result.Return(), Logs: logs, GasUsed: hexutil.Uint64(result.UsedGas)}
 		if result.Failed() {
 			callRes.Status = hexutil.Uint64(types.ReceiptStatusFailed)
@@ -262,6 +273,7 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 			} else {
 				callRes.Error = &callError{Message: result.Err.Error(), Code: errCodeVMError}
 			}
+			log.Error("Execution reverted", "error", callRes.Error)
 		} else {
 			callRes.Status = hexutil.Uint64(types.ReceiptStatusSuccessful)
 			allLogs = append(allLogs, callRes.Logs...)
@@ -281,6 +293,14 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 		// EIP-7251
 		core.ProcessConsolidationQueue(&requests, evm)
 	}
+	log.Info("About to process withdrawals", "size", len(block.BlockOverrides.Withdrawals))
+	for _, w := range block.BlockOverrides.Withdrawals {
+		log.Info("Processing withdrawal", "address", w.Address, "amount", w.Amount)
+		// Amount is in gwei, turn into wei
+		amount := new(big.Int).Mul(new(big.Int).SetUint64(w.Amount), big.NewInt(params.GWei))
+		sim.state.AddBalance(w.Address, uint256.MustFromBig(amount), tracing.BalanceIncreaseWithdrawal)
+	}
+
 	header.Root = sim.state.IntermediateRoot(true)
 	header.GasUsed = gasUsed
 	if sim.chainConfig.IsCancun(header.Number, header.Time) {
@@ -288,7 +308,7 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 	}
 	var withdrawals types.Withdrawals
 	if sim.chainConfig.IsShanghai(header.Number, header.Time) {
-		withdrawals = make([]*types.Withdrawal, 0)
+		withdrawals = block.BlockOverrides.Withdrawals
 	}
 	if requests != nil {
 		reqHash := types.CalcRequestsHash(requests)
@@ -414,7 +434,11 @@ func (sim *simulator) makeHeaders(blocks []simBlock) ([]*types.Header, error) {
 		}
 		var parentBeaconRoot *common.Hash
 		if sim.chainConfig.IsCancun(overrides.Number.ToInt(), (uint64)(*overrides.Time)) {
-			parentBeaconRoot = &common.Hash{}
+			if overrides.ParentBeaconRoot != nil {
+				parentBeaconRoot = overrides.ParentBeaconRoot
+			} else {
+				parentBeaconRoot = &common.Hash{}
+			}
 		}
 		header = overrides.MakeHeader(&types.Header{
 			UncleHash:        types.EmptyUncleHash,

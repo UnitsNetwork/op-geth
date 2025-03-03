@@ -177,8 +177,12 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 	return MakeReceipt(evm, result, statedb, blockNumber, blockHash, tx, *usedGas, root, evm.ChainConfig(), nonce), nil
 }
 
-// MakeReceipt generates the receipt object for a transaction given its execution result.
 func MakeReceipt(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas uint64, root []byte, config *params.ChainConfig, nonce uint64) *types.Receipt {
+	return MakeReceiptWithLogs(evm, result, statedb, blockNumber, blockHash, tx, usedGas, root, config, nonce, statedb.GetLogs(tx.Hash(), blockNumber.Uint64(), blockHash))
+}
+
+// MakeReceiptWithLogs generates the receipt object for a transaction given its execution result.
+func MakeReceiptWithLogs(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas uint64, root []byte, config *params.ChainConfig, nonce uint64, logs []*types.Log) *types.Receipt {
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
 	// by the tx.
 	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: usedGas}
@@ -212,7 +216,7 @@ func MakeReceipt(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, b
 	}
 
 	// Set the receipt logs and create the bloom filter.
-	receipt.Logs = statedb.GetLogs(tx.Hash(), blockNumber.Uint64(), blockHash)
+	receipt.Logs = logs
 	receipt.Bloom = types.CreateBloom(receipt)
 	receipt.BlockHash = blockHash
 	receipt.BlockNumber = blockNumber
