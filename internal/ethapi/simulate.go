@@ -377,12 +377,6 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 		sim.state.AddBalance(w.Address, uint256.MustFromBig(amount), tracing.BalanceIncreaseWithdrawal)
 	}
 
-	header.Root = sim.state.IntermediateRoot(true)
-	header.GasUsed = gasUsed
-	if sim.chainConfig.IsCancun(header.Number, header.Time) {
-		header.BlobGasUsed = &blobGasUsed
-	}
-
 	if requests != nil {
 		reqHash := types.CalcRequestsHash(requests)
 		header.RequestsHash = &reqHash
