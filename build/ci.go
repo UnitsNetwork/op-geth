@@ -185,6 +185,7 @@ func doInstall(cmdline []string) {
 		arch       = flag.String("arch", "", "Architecture to cross build for")
 		cc         = flag.String("cc", "", "C compiler to cross build with")
 		staticlink = flag.Bool("static", false, "Create statically-linked executable")
+		race       = flag.Bool("race", false, "Enable race detector")
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -211,6 +212,10 @@ func doInstall(cmdline []string) {
 
 	// Show packages during build.
 	gobuild.Args = append(gobuild.Args, "-v")
+
+	if *race {
+		gobuild.Args = append(gobuild.Args, "-race")
+	}
 
 	// Now we choose what we're even building.
 	// Default: collect all 'main' packages in cmd/ and build those.
