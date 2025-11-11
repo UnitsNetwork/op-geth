@@ -39,8 +39,8 @@ jobs:
             type=raw,value=${{ inputs.dockerTag }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.description=Unit Zero Node
+            org.opencontainers.image.licenses=GPLv3,LGPLv3
+            org.opencontainers.image.description=Ethereum Optimism
       - uses: docker/build-push-action@v5
         id: push
         with:
@@ -52,3 +52,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: TAG=${{ inputs.dockerTag }}

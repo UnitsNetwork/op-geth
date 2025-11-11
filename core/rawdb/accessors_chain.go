@@ -41,6 +41,9 @@ func ReadCanonicalHash(db ethdb.Reader, number uint64) common.Hash {
 		if len(data) == 0 {
 			// Get it by hash from leveldb
 			data, _ = db.Get(headerHashKey(number))
+			log.Info("ReadCanonicalHash from leveldb", "number", number, "hash", common.BytesToHash(data))
+		} else {
+			log.Info("ReadCanonicalHash from ChainFreezerHashTable", "number", number, "hash", common.BytesToHash(data))
 		}
 		return nil
 	})
@@ -49,6 +52,7 @@ func ReadCanonicalHash(db ethdb.Reader, number uint64) common.Hash {
 
 // WriteCanonicalHash stores the hash assigned to a canonical block number.
 func WriteCanonicalHash(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
+	log.Info("WriteCanonicalHash", "hash", hash, "number", number)
 	if err := db.Put(headerHashKey(number), hash.Bytes()); err != nil {
 		log.Crit("Failed to store number to hash mapping", "err", err)
 	}
@@ -56,6 +60,7 @@ func WriteCanonicalHash(db ethdb.KeyValueWriter, hash common.Hash, number uint64
 
 // DeleteCanonicalHash removes the number to hash canonical mapping.
 func DeleteCanonicalHash(db ethdb.KeyValueWriter, number uint64) {
+	log.Info("DeleteCanonicalHash", "number", number)
 	if err := db.Delete(headerHashKey(number)); err != nil {
 		log.Crit("Failed to delete number to hash mapping", "err", err)
 	}
